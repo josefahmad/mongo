@@ -131,6 +131,7 @@
 
 
 #include <sys/sdt.h>
+#include <pthread.h>
 
 #ifdef __clang__
 // clang's apparent focus on code size somehow causes it to ignore
@@ -1683,6 +1684,7 @@ extern "C" PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) PERFTOOLS_THROW {
 extern "C" PERFTOOLS_DLL_DECL void* tc_malloc(size_t size) PERFTOOLS_THROW {
 
   DTRACE_PROBE1(mongo, tc_malloc, size);
+  DTRACE_PROBE2(mongo, tc_malloc_perthread, size, pthread_self());
   
   void* result = do_malloc_or_cpp_alloc(size);
   MallocHook::InvokeNewHook(result, size);
