@@ -129,6 +129,9 @@
 #include "tcmalloc_guard.h"    // for TCMallocGuard
 #include "thread_cache.h"      // for ThreadCache
 
+
+#include <sys/sdt.h>
+
 #ifdef __clang__
 // clang's apparent focus on code size somehow causes it to ignore
 // normal inline directives even for few functions which inlining is
@@ -1678,6 +1681,9 @@ extern "C" PERFTOOLS_DLL_DECL int tc_set_new_mode(int flag) PERFTOOLS_THROW {
 //         the call to the (de)allocation function.
 
 extern "C" PERFTOOLS_DLL_DECL void* tc_malloc(size_t size) PERFTOOLS_THROW {
+
+  DTRACE_PROBE1(mongo, tc_malloc, size);
+  
   void* result = do_malloc_or_cpp_alloc(size);
   MallocHook::InvokeNewHook(result, size);
   return result;
