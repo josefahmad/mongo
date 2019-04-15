@@ -175,7 +175,7 @@ __wt_spin_lock(WT_SESSION_IMPL *session, WT_SPINLOCK *t)
 	if ((ret = pthread_mutex_lock(&t->lock)) != 0)
 		WT_PANIC_MSG(session, ret, "pthread_mutex_lock: %s", t->name);
 
-        DTRACE_PROBE2(mongo, __wt_spin_lock_acquired, session, t);
+        DTRACE_PROBE2(mongo, __wt_spin_mutex_locked, session, t);
 }
 #endif
 
@@ -191,7 +191,7 @@ __wt_spin_unlock(WT_SESSION_IMPL *session, WT_SPINLOCK *t)
 	if ((ret = pthread_mutex_unlock(&t->lock)) != 0)
 		WT_PANIC_MSG(session, ret, "pthread_mutex_unlock: %s", t->name);
 
-        DTRACE_PROBE2(mongo, __wt_spin_unlocked, session, t);
+        DTRACE_PROBE2(mongo, __wt_spin_mutex_unlocked, session, t);
 }
 
 #elif SPINLOCK_TYPE == SPINLOCK_MSVC
