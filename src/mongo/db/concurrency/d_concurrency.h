@@ -34,6 +34,8 @@
 #include "mongo/db/concurrency/locker.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/util/timer.h"
+#include <sys/sdt.h>
+#include "pthread.h"
 
 namespace mongo {
 
@@ -165,7 +167,9 @@ public:
     class ExclusiveLock : public ResourceLock {
     public:
         ExclusiveLock(Locker* locker, ResourceMutex mutex)
-            : ResourceLock(locker, mutex.rid(), MODE_X) {}
+            : ResourceLock(locker, mutex.rid(), MODE_X) {
+                DTRACE_PROBE2(mongo, ResourceMutexExclusiveLock, mutex.getName(), pthread_self());
+	    }
 
         using ResourceLock::lock;
 
@@ -186,7 +190,8 @@ public:
     class SharedLock : public ResourceLock {
     public:
         SharedLock(Locker* locker, ResourceMutex mutex)
-            : ResourceLock(locker, mutex.rid(), MODE_IS) {}
+            : ResourceLock(locker, mutex.rid(), MODE_IS) {
+	    }
     };
 
     /**
