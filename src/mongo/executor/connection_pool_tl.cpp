@@ -37,6 +37,7 @@
 #include "mongo/config.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/logv2/log.h"
+#include "mongo/platform/usdt.h"
 
 namespace mongo {
 namespace executor {
@@ -327,6 +328,8 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     // For transient connections, only use X.509 auth.
     auto isMasterHook = std::make_shared<TLConnectionSetupHook>(_onConnectHook, x509AuthOnly);
 
+    MONGO_USDT(EgressTLConnectStart);
+
     AsyncDBClient::connect(
         _peer, _sslMode, _serviceContext, _reactor, timeout, _transientSSLContext)
         .thenRunOn(_reactor)
@@ -379,6 +382,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
 
             if (status.isOK()) {
                 handler->promise.emplaceValue();
+                MONGO_USDT(EgressTLConnectComplete);
             } else {
                 LOGV2_DEBUG(22584,
                             2,
