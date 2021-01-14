@@ -47,6 +47,7 @@
 #include "mongo/db/service_context.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/logv2/log.h"
+#include "mongo/platform/usdt.h"
 #include "mongo/transport/asio_utils.h"
 #include "mongo/transport/service_entry_point.h"
 #include "mongo/transport/transport_options_gen.h"
@@ -508,6 +509,7 @@ StatusWith<SessionHandle> TransportLayerASIO::connect(
          ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
           (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
         Date_t timeBefore = Date_t::now();
+        MONGO_USDT(EgressTLSyncTLSHandshakeStart);
         auto sslStatus = session->handshakeSSLForEgress(peer).getNoThrow();
         Date_t timeAfter = Date_t::now();
         if (timeAfter - timeBefore > kSlowOperationThreshold) {
@@ -517,6 +519,7 @@ StatusWith<SessionHandle> TransportLayerASIO::connect(
         if (!sslStatus.isOK()) {
             return sslStatus;
         }
+        MONGO_USDT(EgressTLSyncTLSHandshakeComplete);
     }
 #endif
 
@@ -716,6 +719,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                  ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
                   (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
                 Date_t timeBefore = Date_t::now();
+                MONGO_USDT(EgressTLAsyncTLSHandshakeStart);
                 return connector->session
                     ->handshakeSSLForEgressWithLock(
                         std::move(lk), connector->peer, connector->reactor)
@@ -724,6 +728,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                         if (timeAfter - timeBefore > kSlowOperationThreshold) {
                             networkCounter.incrementNumSlowSSLOperations();
                         }
+                        MONGO_USDT(EgressTLAsyncTLSHandshakeComplete);
                         return Status::OK();
                     });
             }
