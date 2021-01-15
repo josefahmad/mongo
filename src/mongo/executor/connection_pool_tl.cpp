@@ -338,27 +338,35 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .then([this, isMasterHook](AsyncDBClient::Handle client) {
             _client = std::move(client);
-            return _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
+            MONGO_USDT(EgressTLWireHandshakeStart);
+            auto status = _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
+            MONGO_USDT(EgressTLWireHandshakeComplete);
+            return status;
         })
         .then([this, isMasterHook]() -> Future<bool> {
             if (_skipAuth) {
                 return false;
             }
-
-            return _client->completeSpeculativeAuth(isMasterHook->getSession(),
+            MONGO_USDT(EgressTLAuthSpeculativeStart);
+            auto status = _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
                                                     isMasterHook->getSpeculativeAuthenticateReply(),
                                                     isMasterHook->getSpeculativeAuthType());
+            MONGO_USDT(EgressTLAuthSpeculativeComplete);
+            return status;
         })
         .then([this, isMasterHook, authParametersProvider](bool authenticatedDuringConnect) {
             if (_skipAuth || authenticatedDuringConnect) {
                 return Future<void>::makeReady();
             }
 
+            MONGO_USDT(EgressTLAuthStart);
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
                 mechanism = isMasterHook->saslMechsForInternalAuth().front();
-            return _client->authenticateInternal(std::move(mechanism), authParametersProvider);
+            auto status = _client->authenticateInternal(std::move(mechanism), authParametersProvider);
+            MONGO_USDT(EgressTLAuthComplete);
+            return status;
         })
         .then([this] {
             if (!_onConnectHook) {
