@@ -328,7 +328,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     // For transient connections, only use X.509 auth.
     auto isMasterHook = std::make_shared<TLConnectionSetupHook>(_onConnectHook, x509AuthOnly);
 
-    MONGO_USDT(EgressConnectSetup);
+    MONGO_USDT(EgressConnectSetup, _peer.toString());
 
     AsyncDBClient::connect(
         _peer, _sslMode, _serviceContext, _reactor, timeout, _transientSSLContext)
@@ -338,7 +338,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .then([this, isMasterHook](AsyncDBClient::Handle client) {
             _client = std::move(client);
-            MONGO_USDT(EgressConnectMDBHandshake);
+            MONGO_USDT(EgressConnectMDBHandshake, _peer.toString());
             auto status = _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
             MONGO_USDT(EgressConnectMDBHandshakeEnd);
             return status;
@@ -347,7 +347,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
             if (_skipAuth) {
                 return false;
             }
-            MONGO_USDT(EgressConnectAuthSpeculative);
+            MONGO_USDT(EgressConnectAuthSpeculative, _peer.toString());
             auto status = _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
                                                     isMasterHook->getSpeculativeAuthenticateReply(),
@@ -360,7 +360,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                 return Future<void>::makeReady();
             }
 
-            MONGO_USDT(EgressConnectAuth);
+            MONGO_USDT(EgressConnectAuth, _peer.toString());
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
                 mechanism = isMasterHook->saslMechsForInternalAuth().front();

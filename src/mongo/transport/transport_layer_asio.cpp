@@ -717,7 +717,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                  ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
                   (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
                 Date_t timeBefore = Date_t::now();
-                MONGO_USDT(EgressConnectTLSHandshake);
+                MONGO_USDT(EgressConnectTLSHandshake, connector->peer.toString());
                 return connector->session
                     ->handshakeSSLForEgressWithLock(
                         std::move(lk), connector->peer, connector->reactor)
