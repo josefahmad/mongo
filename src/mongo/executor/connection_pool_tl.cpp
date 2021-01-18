@@ -338,9 +338,9 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .then([this, isMasterHook](AsyncDBClient::Handle client) {
             _client = std::move(client);
-            MONGO_USDT(EgressConnectWireNegotiation);
+            MONGO_USDT(EgressConnectMDBHandshake);
             auto status = _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
-            MONGO_USDT(EgressConnectWireNegotiationEnd);
+            MONGO_USDT(EgressConnectMDBHandshakeEnd);
             return status;
         })
         .then([this, isMasterHook]() -> Future<bool> {
