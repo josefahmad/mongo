@@ -509,7 +509,6 @@ StatusWith<SessionHandle> TransportLayerASIO::connect(
          ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
           (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
         Date_t timeBefore = Date_t::now();
-        MONGO_USDT(EgressTLSyncTLSHandshakeStart);
         auto sslStatus = session->handshakeSSLForEgress(peer).getNoThrow();
         Date_t timeAfter = Date_t::now();
         if (timeAfter - timeBefore > kSlowOperationThreshold) {
@@ -519,7 +518,6 @@ StatusWith<SessionHandle> TransportLayerASIO::connect(
         if (!sslStatus.isOK()) {
             return sslStatus;
         }
-        MONGO_USDT(EgressTLSyncTLSHandshakeComplete);
     }
 #endif
 
@@ -719,7 +717,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                  ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
                   (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
                 Date_t timeBefore = Date_t::now();
-                MONGO_USDT(EgressTLAsyncTLSHandshakeStart);
+                MONGO_USDT(EgressConnectTLSHandshake);
                 return connector->session
                     ->handshakeSSLForEgressWithLock(
                         std::move(lk), connector->peer, connector->reactor)
@@ -728,7 +726,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                         if (timeAfter - timeBefore > kSlowOperationThreshold) {
                             networkCounter.incrementNumSlowSSLOperations();
                         }
-                        MONGO_USDT(EgressTLAsyncTLSHandshakeComplete);
+                        MONGO_USDT(EgressConnectTLSHandshakeEnd);
                         return Status::OK();
                     });
             }

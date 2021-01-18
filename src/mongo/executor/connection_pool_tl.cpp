@@ -328,7 +328,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     // For transient connections, only use X.509 auth.
     auto isMasterHook = std::make_shared<TLConnectionSetupHook>(_onConnectHook, x509AuthOnly);
 
-    MONGO_USDT(EgressTLConnectStart);
+    MONGO_USDT(EgressConnectSetup);
 
     AsyncDBClient::connect(
         _peer, _sslMode, _serviceContext, _reactor, timeout, _transientSSLContext)
@@ -338,21 +338,21 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .then([this, isMasterHook](AsyncDBClient::Handle client) {
             _client = std::move(client);
-            MONGO_USDT(EgressTLWireHandshakeStart);
+            MONGO_USDT(EgressConnectWireNegotiation);
             auto status = _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
-            MONGO_USDT(EgressTLWireHandshakeComplete);
+            MONGO_USDT(EgressConnectWireNegotiationEnd);
             return status;
         })
         .then([this, isMasterHook]() -> Future<bool> {
             if (_skipAuth) {
                 return false;
             }
-            MONGO_USDT(EgressTLAuthSpeculativeStart);
+            MONGO_USDT(EgressConnectAuthSpeculative);
             auto status = _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
                                                     isMasterHook->getSpeculativeAuthenticateReply(),
                                                     isMasterHook->getSpeculativeAuthType());
-            MONGO_USDT(EgressTLAuthSpeculativeComplete);
+            MONGO_USDT(EgressConnectAuthSpeculativeEnd);
             return status;
         })
         .then([this, isMasterHook, authParametersProvider](bool authenticatedDuringConnect) {
@@ -360,12 +360,12 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                 return Future<void>::makeReady();
             }
 
-            MONGO_USDT(EgressTLAuthStart);
+            MONGO_USDT(EgressConnectAuth);
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
                 mechanism = isMasterHook->saslMechsForInternalAuth().front();
             auto status = _client->authenticateInternal(std::move(mechanism), authParametersProvider);
-            MONGO_USDT(EgressTLAuthComplete);
+            MONGO_USDT(EgressConnectAuthEnd);
             return status;
         })
         .then([this] {
@@ -383,23 +383,24 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .getAsync([this, handler, anchor](Status status) {
             if (handler->done.swap(true)) {
+                // Timed out
                 return;
-            }
-
-            cancelTimeout();
-
-            if (status.isOK()) {
-                handler->promise.emplaceValue();
-                MONGO_USDT(EgressTLConnectComplete);
             } else {
-                LOGV2_DEBUG(22584,
-                            2,
-                            "Failed to connect to {hostAndPort} - {error}",
-                            "Failed to connect",
-                            "hostAndPort"_attr = _peer,
-                            "error"_attr = redact(status));
-                handler->promise.setError(status);
+                cancelTimeout();
+
+                if (status.isOK()) {
+                    handler->promise.emplaceValue();
+                } else {
+                    LOGV2_DEBUG(22584,
+                                2,
+                                "Failed to connect to {hostAndPort} - {error}",
+                                "Failed to connect",
+                                "hostAndPort"_attr = _peer,
+                                "error"_attr = redact(status));
+                    handler->promise.setError(status);
+                }
             }
+            MONGO_USDT(EgressConnectSetupEnd);
         });
     LOGV2_DEBUG(22585, 2, "Finished connection setup.");
 }
