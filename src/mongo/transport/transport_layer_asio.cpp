@@ -47,7 +47,6 @@
 #include "mongo/db/service_context.h"
 #include "mongo/db/stats/counters.h"
 #include "mongo/logv2/log.h"
-#include "mongo/platform/usdt.h"
 #include "mongo/transport/asio_utils.h"
 #include "mongo/transport/service_entry_point.h"
 #include "mongo/transport/transport_options_gen.h"
@@ -717,7 +716,6 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                  ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
                   (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
                 Date_t timeBefore = Date_t::now();
-                MONGO_USDT(EgressConnectTLSHandshake, connector->peer.toString().c_str());
                 return connector->session
                     ->handshakeSSLForEgressWithLock(
                         std::move(lk), connector->peer, connector->reactor)
@@ -726,7 +724,6 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                         if (timeAfter - timeBefore > kSlowOperationThreshold) {
                             networkCounter.incrementNumSlowSSLOperations();
                         }
-                        MONGO_USDT(EgressConnectTLSHandshakeEnd);
                         return Status::OK();
                     });
             }

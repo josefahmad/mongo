@@ -37,7 +37,6 @@
 #include "mongo/config.h"
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/logv2/log.h"
-#include "mongo/platform/usdt.h"
 
 namespace mongo {
 namespace executor {
@@ -328,8 +327,6 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     // For transient connections, only use X.509 auth.
     auto isMasterHook = std::make_shared<TLConnectionSetupHook>(_onConnectHook, x509AuthOnly);
 
-    MONGO_USDT(EgressConnectSetup, _peer.toString().c_str());
-
     AsyncDBClient::connect(
         _peer, _sslMode, _serviceContext, _reactor, timeout, _transientSSLContext)
         .thenRunOn(_reactor)
@@ -338,35 +335,27 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .then([this, isMasterHook](AsyncDBClient::Handle client) {
             _client = std::move(client);
-            MONGO_USDT(EgressConnectMDBHandshake, _peer.toString().c_str());
-            auto status = _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
-            MONGO_USDT(EgressConnectMDBHandshakeEnd);
-            return status;
+            return _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
         })
         .then([this, isMasterHook]() -> Future<bool> {
             if (_skipAuth) {
                 return false;
             }
-            MONGO_USDT(EgressConnectAuthSpeculative, _peer.toString().c_str());
-            auto status = _client->completeSpeculativeAuth(isMasterHook->getSession(),
+
+            return _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
                                                     isMasterHook->getSpeculativeAuthenticateReply(),
                                                     isMasterHook->getSpeculativeAuthType());
-            MONGO_USDT(EgressConnectAuthSpeculativeEnd);
-            return status;
         })
         .then([this, isMasterHook, authParametersProvider](bool authenticatedDuringConnect) {
             if (_skipAuth || authenticatedDuringConnect) {
                 return Future<void>::makeReady();
             }
 
-            MONGO_USDT(EgressConnectAuth, _peer.toString().c_str());
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
                 mechanism = isMasterHook->saslMechsForInternalAuth().front();
-            auto status = _client->authenticateInternal(std::move(mechanism), authParametersProvider);
-            MONGO_USDT(EgressConnectAuthEnd);
-            return status;
+            return _client->authenticateInternal(std::move(mechanism), authParametersProvider);
         })
         .then([this] {
             if (!_onConnectHook) {
@@ -383,24 +372,22 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .getAsync([this, handler, anchor](Status status) {
             if (handler->done.swap(true)) {
-                // Timed out
                 return;
-            } else {
-                cancelTimeout();
-
-                if (status.isOK()) {
-                    handler->promise.emplaceValue();
-                } else {
-                    LOGV2_DEBUG(22584,
-                                2,
-                                "Failed to connect to {hostAndPort} - {error}",
-                                "Failed to connect",
-                                "hostAndPort"_attr = _peer,
-                                "error"_attr = redact(status));
-                    handler->promise.setError(status);
-                }
             }
-            MONGO_USDT(EgressConnectSetupEnd);
+
+            cancelTimeout();
+
+            if (status.isOK()) {
+                handler->promise.emplaceValue();
+            } else {
+                LOGV2_DEBUG(22584,
+                            2,
+                            "Failed to connect to {hostAndPort} - {error}",
+                            "Failed to connect",
+                            "hostAndPort"_attr = _peer,
+                            "error"_attr = redact(status));
+                handler->promise.setError(status);
+            }
         });
     LOGV2_DEBUG(22585, 2, "Finished connection setup.");
 }
