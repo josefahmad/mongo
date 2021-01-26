@@ -38,6 +38,8 @@
 #include "mongo/db/auth/authorization_manager.h"
 #include "mongo/logv2/log.h"
 
+#include "mongo/platform/usdt.h"
+
 namespace mongo {
 namespace executor {
 namespace connection_pool_tl {
@@ -327,6 +329,8 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     // For transient connections, only use X.509 auth.
     auto isMasterHook = std::make_shared<TLConnectionSetupHook>(_onConnectHook, x509AuthOnly);
 
+    MONGO_USDT(ConnEgress);
+
     AsyncDBClient::connect(
         _peer, _sslMode, _serviceContext, _reactor, timeout, _transientSSLContext)
         .thenRunOn(_reactor)
@@ -335,12 +339,21 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
         })
         .then([this, isMasterHook](AsyncDBClient::Handle client) {
             _client = std::move(client);
+
+            MONGO_USDT(ConnEgressMDBHandshake);
+            ON_BLOCK_EXIT(
+                [p = _peer.toString()]() { MONGO_USDT(ConnEgressMDBHandshakeRet, p.c_str()); });
+
             return _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
         })
         .then([this, isMasterHook]() -> Future<bool> {
             if (_skipAuth) {
                 return false;
             }
+
+            MONGO_USDT(ConnEgressAuthSpeculative);
+            ON_BLOCK_EXIT(
+                [p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthSpeculativeRet, p.c_str()); });
 
             return _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
@@ -351,6 +364,9 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
             if (_skipAuth || authenticatedDuringConnect) {
                 return Future<void>::makeReady();
             }
+
+            MONGO_USDT(ConnEgressAuth);
+            ON_BLOCK_EXIT([p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthRet, p.c_str()); });
 
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
@@ -371,6 +387,9 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                 });
         })
         .getAsync([this, handler, anchor](Status status) {
+
+            ON_BLOCK_EXIT([p = _peer.toString()]() { MONGO_USDT(ConnEgressRet, p.c_str()); });
+
             if (handler->done.swap(true)) {
                 return;
             }
