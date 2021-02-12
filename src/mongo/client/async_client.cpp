@@ -63,11 +63,12 @@ Future<AsyncDBClient::Handle> AsyncDBClient::connect(
     ServiceContext* const context,
     transport::ReactorHandle reactor,
     Milliseconds timeout,
+    uint32_t connid,
     std::shared_ptr<const transport::SSLConnectionContext> transientSSLContext) {
     auto tl = context->getTransportLayer();
-    return tl->asyncConnect(peer, sslMode, std::move(reactor), timeout, transientSSLContext)
-        .then([peer, context](transport::SessionHandle session) {
-            return std::make_shared<AsyncDBClient>(peer, std::move(session), context);
+    return tl->asyncConnect(peer, sslMode, std::move(reactor), timeout, connid, transientSSLContext)
+        .then([peer, context, connid](transport::SessionHandle session) {
+            return std::make_shared<AsyncDBClient>(peer, std::move(session), context, connid);
         });
 }
 

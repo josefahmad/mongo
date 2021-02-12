@@ -200,6 +200,7 @@ private:
     // SSL context to use intead of the default one for this pool.
     const std::shared_ptr<const transport::SSLConnectionContext> _transientSSLContext;
     AsyncDBClient::Handle _client;
+
 };
 
 }  // namespace connection_pool_tl

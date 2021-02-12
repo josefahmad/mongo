@@ -130,6 +130,7 @@ public:
         ConnectSSLMode sslMode,
         const ReactorHandle& reactor,
         Milliseconds timeout,
+        uint32_t connid,
         std::shared_ptr<const SSLConnectionContext> transientSSLContext = nullptr) final;
 
     Status setup() final;

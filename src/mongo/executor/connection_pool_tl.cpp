@@ -294,6 +294,11 @@ private:
 
 }  // namespace
 
+namespace {
+    // Identifies an establishing egress connection; can roll over.
+    AtomicWord<uint32_t> _connid(0);
+}
+
 void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     auto anchor = shared_from_this();
 
@@ -329,44 +334,49 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     // For transient connections, only use X.509 auth.
     auto isMasterHook = std::make_shared<TLConnectionSetupHook>(_onConnectHook, x509AuthOnly);
 
-    MONGO_USDT(ConnEgress);
+    // OK now make the ID static and incremental.
+    // then percolate it all the way to the getAsync
+
+    auto connid = _connid.load();
+
+    MONGO_USDT(ConnEgress, connid);
 
     AsyncDBClient::connect(
-        _peer, _sslMode, _serviceContext, _reactor, timeout, _transientSSLContext)
+        _peer, _sslMode, _serviceContext, _reactor, timeout, connid, _transientSSLContext)
         .thenRunOn(_reactor)
         .onError([](StatusWith<AsyncDBClient::Handle> swc) -> StatusWith<AsyncDBClient::Handle> {
             return Status(ErrorCodes::HostUnreachable, swc.getStatus().reason());
         })
-        .then([this, isMasterHook](AsyncDBClient::Handle client) {
+        .then([this, isMasterHook, connid](AsyncDBClient::Handle client) {
             _client = std::move(client);
 
-            MONGO_USDT(ConnEgressMDBHandshake);
+            MONGO_USDT(ConnEgressMDBHandshake, connid);
             ON_BLOCK_EXIT(
-                [p = _peer.toString()]() { MONGO_USDT(ConnEgressMDBHandshakeRet, p.c_str()); });
+                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressMDBHandshakeRet, connid, p.c_str()); });
 
             return _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
         })
-        .then([this, isMasterHook]() -> Future<bool> {
+        .then([this, isMasterHook, connid]() -> Future<bool> {
             if (_skipAuth) {
                 return false;
             }
 
-            MONGO_USDT(ConnEgressAuthSpeculative);
+            MONGO_USDT(ConnEgressAuthSpeculative, connid);
             ON_BLOCK_EXIT(
-                [p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthSpeculativeRet, p.c_str()); });
+                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthSpeculativeRet, connid, p.c_str()); });
 
             return _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
                                                     isMasterHook->getSpeculativeAuthenticateReply(),
                                                     isMasterHook->getSpeculativeAuthType());
         })
-        .then([this, isMasterHook, authParametersProvider](bool authenticatedDuringConnect) {
+        .then([this, isMasterHook, authParametersProvider, connid](bool authenticatedDuringConnect) {
             if (_skipAuth || authenticatedDuringConnect) {
                 return Future<void>::makeReady();
             }
 
-            MONGO_USDT(ConnEgressAuth);
-            ON_BLOCK_EXIT([p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthRet, p.c_str()); });
+            MONGO_USDT(ConnEgressAuth, connid);
+            ON_BLOCK_EXIT([connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthRet, connid, p.c_str()); });
 
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
@@ -386,9 +396,9 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                     return _onConnectHook->handleReply(_peer, std::move(response));
                 });
         })
-        .getAsync([this, handler, anchor](Status status) {
+        .getAsync([this, handler, anchor, connid](Status status) {
 
-            ON_BLOCK_EXIT([p = _peer.toString()]() { MONGO_USDT(ConnEgressRet, p.c_str()); });
+            ON_BLOCK_EXIT([connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressRet, connid, p.c_str()); });
 
             if (handler->done.swap(true)) {
                 return;
@@ -409,6 +419,7 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
             }
         });
     LOGV2_DEBUG(22585, 2, "Finished connection setup.");
+    _connid.addAndFetch(1);
 }
 
 void TLConnection::refresh(Milliseconds timeout, RefreshCallback cb) {

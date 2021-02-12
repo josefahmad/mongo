@@ -597,6 +597,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
     ConnectSSLMode sslMode,
     const ReactorHandle& reactor,
     Milliseconds timeout,
+    uint32_t connid,
     std::shared_ptr<const SSLConnectionContext> transientSSLContext) {
     if (transientSSLContext) {
         uassert(ErrorCodes::InvalidSSLConfiguration,
@@ -697,7 +698,7 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
 #endif
             return connector->socket.async_connect(*connector->resolvedEndpoint, UseFuture{});
         })
-        .then([this, connector, sslMode, transientSSLContext]() -> Future<void> {
+        .then([this, connector, sslMode, transientSSLContext, connid]() -> Future<void> {
             stdx::unique_lock<Latch> lk(connector->mutex);
             connector->session = std::make_shared<ASIOSession>(this,
                                                                std::move(connector->socket),
@@ -717,16 +718,16 @@ Future<SessionHandle> TransportLayerASIO::asyncConnect(
                  ((globalSSLMode == SSLParams::SSLMode_preferSSL) ||
                   (globalSSLMode == SSLParams::SSLMode_requireSSL)))) {
 
-                MONGO_USDT(ConnEgressTLSHandshake);
-                ON_BLOCK_EXIT([p = connector->peer.toString()]() {
-                    MONGO_USDT(ConnEgressTLSHandshakeRet, p.c_str());
-                });
+                MONGO_USDT(ConnEgressTLSHandshake, connid);
 
                 Date_t timeBefore = Date_t::now();
                 return connector->session
                     ->handshakeSSLForEgressWithLock(
                         std::move(lk), connector->peer, connector->reactor)
-                    .then([connector, timeBefore] {
+                    .then([connector, timeBefore, connid] {
+                        ON_BLOCK_EXIT([connid, p = connector->peer.toString()]() {
+                            MONGO_USDT(ConnEgressTLSHandshakeRet, connid, p.c_str());
+                        });
                         Date_t timeAfter = Date_t::now();
                         if (timeAfter - timeBefore > kSlowOperationThreshold) {
                             networkCounter.incrementNumSlowSSLOperations();

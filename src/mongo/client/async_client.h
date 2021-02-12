@@ -50,8 +50,9 @@ class AsyncDBClient : public std::enable_shared_from_this<AsyncDBClient> {
 public:
     explicit AsyncDBClient(const HostAndPort& peer,
                            transport::SessionHandle session,
-                           ServiceContext* svcCtx)
-        : _peer(std::move(peer)), _session(std::move(session)), _svcCtx(svcCtx) {}
+                           ServiceContext* svcCtx,
+                           uint32_t connid)
+        : _peer(std::move(peer)), _session(std::move(session)), _svcCtx(svcCtx), _connid(connid) {}
 
     using Handle = std::shared_ptr<AsyncDBClient>;
 
@@ -61,6 +62,7 @@ public:
         ServiceContext* const context,
         transport::ReactorHandle reactor,
         Milliseconds timeout,
+        uint32_t connid,
         std::shared_ptr<const transport::SSLConnectionContext> transientSSLContext = nullptr);
 
     Future<executor::RemoteCommandResponse> runCommandRequest(
@@ -117,6 +119,7 @@ private:
     ServiceContext* const _svcCtx;
     MessageCompressorManager _compressorManager;
     boost::optional<rpc::Protocol> _negotiatedProtocol;
+    const uint32_t _connid;
 };
 
 }  // namespace mongo
