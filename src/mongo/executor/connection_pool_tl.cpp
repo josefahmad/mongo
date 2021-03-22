@@ -357,13 +357,10 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
             return _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
         })
         .then([this, isMasterHook, connid]() -> Future<bool> {
+            MONGO_USDT(ConnEgressAuth, connid);
             if (_skipAuth) {
                 return false;
             }
-
-            MONGO_USDT(ConnEgressAuthSpeculative, connid);
-            ON_BLOCK_EXIT(
-                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthSpeculativeRet, connid, p.c_str()); });
 
             return _client->completeSpeculativeAuth(isMasterHook->getSession(),
                                                     auth::getInternalAuthDB(),
@@ -371,12 +368,12 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                                                     isMasterHook->getSpeculativeAuthType());
         })
         .then([this, isMasterHook, authParametersProvider, connid](bool authenticatedDuringConnect) {
+            ON_BLOCK_EXIT(
+                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthRet, connid, p.c_str()); });
+
             if (_skipAuth || authenticatedDuringConnect) {
                 return Future<void>::makeReady();
             }
-
-            MONGO_USDT(ConnEgressAuth, connid);
-            ON_BLOCK_EXIT([connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthRet, connid, p.c_str()); });
 
             boost::optional<std::string> mechanism;
             if (!isMasterHook->saslMechsForInternalAuth().empty())
