@@ -116,7 +116,7 @@ TEST(TransportLayerASIO, ShortReadsAndWritesWork) {
     });
 
     AsyncDBClient::Handle handle =
-        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max())
+        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max(), 0)
             .get();
 
     handle->initWireVersion(__FILE__, nullptr).get();
@@ -150,7 +150,7 @@ TEST(TransportLayerASIO, asyncConnectTimeoutCleansUpSocket) {
 
     FailPointEnableBlock fp("transportLayerASIOasyncConnectTimesOut");
     auto client =
-        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds{500})
+        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds{500}, 0)
             .getNoThrow();
     ASSERT_EQ(client.getStatus(), ErrorCodes::NetworkTimeout);
 }
@@ -169,7 +169,7 @@ TEST(TransportLayerASIO, exhaustIsMasterShouldReceiveMultipleReplies) {
     });
 
     AsyncDBClient::Handle handle =
-        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max())
+        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max(), 0)
             .get();
 
     handle->initWireVersion(__FILE__, nullptr).get();
@@ -251,12 +251,12 @@ TEST(TransportLayerASIO, exhaustIsMasterShouldStopOnFailure) {
     });
 
     AsyncDBClient::Handle isMasterHandle =
-        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max())
+        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max(), 0)
             .get();
     isMasterHandle->initWireVersion(__FILE__, nullptr).get();
 
     AsyncDBClient::Handle failpointHandle =
-        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max())
+        AsyncDBClient::connect(server, transport::kGlobalSSLMode, sc, reactor, Milliseconds::max(), 0)
             .get();
     failpointHandle->initWireVersion(__FILE__, nullptr).get();
 

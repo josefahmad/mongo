@@ -295,9 +295,9 @@ private:
 }  // namespace
 
 namespace {
-    // Identifies an establishing egress connection; can roll over.
-    AtomicWord<uint32_t> _connid(0);
-}
+// Identifies an establishing egress connection; can roll over.
+AtomicWord<uint32_t> _connid(0);
+}  // namespace
 
 void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
     auto anchor = shared_from_this();
@@ -351,8 +351,9 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
             _client = std::move(client);
 
             MONGO_USDT(ConnEgressMDBHandshake, connid);
-            ON_BLOCK_EXIT(
-                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressMDBHandshakeRet, connid, p.c_str()); });
+            ON_BLOCK_EXIT([connid, p = _peer.toString()]() {
+                MONGO_USDT(ConnEgressMDBHandshakeRet, connid, p.c_str());
+            });
 
             return _client->initWireVersion("NetworkInterfaceTL", isMasterHook.get());
         })
@@ -367,19 +368,21 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                                                     isMasterHook->getSpeculativeAuthenticateReply(),
                                                     isMasterHook->getSpeculativeAuthType());
         })
-        .then([this, isMasterHook, authParametersProvider, connid](bool authenticatedDuringConnect) {
-            ON_BLOCK_EXIT(
-                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressAuthRet, connid, p.c_str()); });
+        .then(
+            [this, isMasterHook, authParametersProvider, connid](bool authenticatedDuringConnect) {
+                ON_BLOCK_EXIT([connid, p = _peer.toString()]() {
+                    MONGO_USDT(ConnEgressAuthRet, connid, p.c_str());
+                });
 
-            if (_skipAuth || authenticatedDuringConnect) {
-                return Future<void>::makeReady();
-            }
+                if (_skipAuth || authenticatedDuringConnect) {
+                    return Future<void>::makeReady();
+                }
 
-            boost::optional<std::string> mechanism;
-            if (!isMasterHook->saslMechsForInternalAuth().empty())
-                mechanism = isMasterHook->saslMechsForInternalAuth().front();
-            return _client->authenticateInternal(std::move(mechanism), authParametersProvider);
-        })
+                boost::optional<std::string> mechanism;
+                if (!isMasterHook->saslMechsForInternalAuth().empty())
+                    mechanism = isMasterHook->saslMechsForInternalAuth().front();
+                return _client->authenticateInternal(std::move(mechanism), authParametersProvider);
+            })
         .then([this] {
             if (!_onConnectHook) {
                 return Future<void>::makeReady();
@@ -394,8 +397,8 @@ void TLConnection::setup(Milliseconds timeout, SetupCallback cb) {
                 });
         })
         .getAsync([this, handler, anchor, connid](Status status) {
-
-            ON_BLOCK_EXIT([connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressRet, connid, p.c_str()); });
+            ON_BLOCK_EXIT(
+                [connid, p = _peer.toString()]() { MONGO_USDT(ConnEgressRet, connid, p.c_str()); });
 
             if (handler->done.swap(true)) {
                 return;
